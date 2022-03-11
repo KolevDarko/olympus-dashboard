@@ -7,14 +7,19 @@ from decimal import Decimal
 INFURA_API_KEY = os.getenv('INFURA_API_KEY')
 COINMARKETCAP_API_KEY = os.getenv('CMC_API_KEY')
 
-# INFURA_URL = f"https://mainnet.infura.io/v3/{INFURA_API_KEY}"
-# CMC_API_KEY = "a98770be50430d344543261b2485f86a55f571e6db87d2c4b84fbda4c6598070"
-web3 = Web3(Web3.HTTPProvider(INFURA_API_KEY))
+INFURA_URL = f"https://mainnet.infura.io/v3/{INFURA_API_KEY}"
+COINMARKETCAP_API_KEY = "a98770be50430d344543261b2485f86a55f571e6db87d2c4b84fbda4c6598070"
+CUSTOM_BOND_ADDRESS = "0x9BFb385c1aDB607a427183Bd3eB7dc687f639F26"
+web3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
+
+def create_bond_contract():
+    return web3.eth.contract(address=web3.toChecksumAddress(CUSTOM_BOND_ADDRESS),
+                             abi=CUSTOM_BOND_ABI)
 
 
 def extract_events(tx_hash):
-    custom_bond = web3.eth.contract(address=web3.toChecksumAddress('0x9BFb385c1aDB607a427183Bd3eB7dc687f639F26'),
-                                    abi=CUSTOM_BOND_ABI)
+    custom_bond = create_bond_contract()
     receipt = web3.eth.get_transaction_receipt(tx_hash)
     bond_created_event = custom_bond.events.BondCreated().processReceipt(receipt)
     transfers = custom_bond.events.Transfer().processReceipt(receipt)
@@ -41,6 +46,12 @@ def get_payout_token_data(custom_treasury_address):
     }
 
 
+def get_bond_terms():
+    custom_bond = create_bond_contract()
+    bond_terms = custom_bond.functions.terms().call()
+    return bond_terms
+
+
 if __name__ == '__main__':
     all_events = extract_events('0x14dc5b46f607e2f0594bc633a50c1218f38f65216aaf3e9296f14bfa38fc3bc1')
     decimals_divider = 1e18
@@ -50,5 +61,11 @@ if __name__ == '__main__':
     payout_token_data = get_payout_token_data(custom_treasury_address)
     payout_token_symbol = payout_token_data['symbol']
     usd_price = payout_token_data['price']
-    total_usd_payout = payout_token_amount * Decimal(usd_price)
+    total_usd_payout = full_tokens * Decimal(usd_price)
     print(f'Payout tokens were {full_tokens} {payout_token_symbol}, in value of ${total_usd_payout}')
+    blocks_per_day = 6450
+    bond_terms = get_bond_terms()
+    vesting_term = bond_terms[1]
+    vesting_days = vesting_term / blocks_per_day
+    profit_per_day = vesting_days / total_usd_payout
+    print(f'Payout per day is ${profit_per_day}')
